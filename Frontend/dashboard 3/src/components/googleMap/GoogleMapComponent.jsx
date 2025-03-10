@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
+import {
+  GoogleMap,
+  Marker,
+  useJsApiLoader,
+  DirectionsRenderer,
+} from "@react-google-maps/api";
 import { useParams } from "react-router-dom";
 import { request } from "../../axios_Helper.js";
 import "./googleMapComponent.scss";
@@ -22,6 +27,7 @@ const GoogleMapComponent = () => {
   });
 
   const [markerPositions, setMarkerPositions] = useState([]);
+  const [directions, setDirections] = useState(null);
   const [totalDistance, setTotalDistance] = useState(0);
 
   useEffect(() => {
@@ -64,6 +70,52 @@ const GoogleMapComponent = () => {
     fetchRouteData();
   }, [id]);
 
+  useEffect(() => {
+    if (!isLoaded || markerPositions.length < 2) {
+      setDirections(null); // Clear directions if less than 2 markers
+      setTotalDistance(0);
+      return;
+    }
+
+    const calculateRoute = () => {
+      const directionsService = new window.google.maps.DirectionsService();
+      const origin = markerPositions[0];
+      const destination = markerPositions[markerPositions.length - 1];
+
+      const waypoints = markerPositions.slice(1, -1).map((position) => ({
+        location: new window.google.maps.LatLng(position.lat, position.lng),
+        stopover: true,
+      }));
+
+      directionsService.route(
+        {
+          origin: new window.google.maps.LatLng(origin.lat, origin.lng),
+          destination: new window.google.maps.LatLng(
+            destination.lat,
+            destination.lng
+          ),
+          waypoints,
+          travelMode: window.google.maps.TravelMode.DRIVING,
+        },
+        (result, status) => {
+          if (status === "OK") {
+            setDirections(result);
+            let distance = 0;
+            result.routes[0].legs.forEach((leg) => {
+              distance += leg.distance.value;
+            });
+            setTotalDistance(distance / 1000); // Convert meters to km
+          } else {
+            console.error("Error fetching directions:", status);
+            setDirections(null); // Ensure the directions are cleared on failure
+          }
+        }
+      );
+    };
+
+    calculateRoute();
+  }, [isLoaded, markerPositions]);
+
   if (!isLoaded) return <div>Loading Map...</div>;
 
   return (
@@ -79,6 +131,10 @@ const GoogleMapComponent = () => {
               }}
             />
           ))}
+
+          {directions && markerPositions.length > 1 && (
+            <DirectionsRenderer directions={directions} />
+          )}
         </GoogleMap>
       </div>
       <div className="markerPositions">
